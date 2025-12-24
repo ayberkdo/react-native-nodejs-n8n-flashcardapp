@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Language {
+  id         Int         @id @default(autoincrement())
+  code       String      @unique @db.VarChar(10)
+  name       String      @db.VarChar(100)
+  flashcards Flashcard[]
+
+  @@map("languages")
+}
+
+model Flashcard {
+  id            String          @id @default(uuid())
+  title         String          @db.VarChar(100)
+  description   String?         @db.VarChar(255)
+  notes         String?         @db.Text
+  words         Json // [{ "front": "apple", "back": "elma" }]
+  
+  languageId    Int
+  language      Language        @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  
+  // İlişkiler
+  wordAnalytics WordAnalytics[]
+  sessions      StudySession[]
+
+  lastStudiedAt DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("flashcards")
+}
+
+// 1. KELİME BAZLI ANALİZ (n8n buradaki istatistiklere bakacak)
+model WordAnalytics {
+  id          Int       @id @default(autoincrement())
+  flashcardId String
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  wordKey     String    @db.VarChar(255) // JSON içindeki 'front' kelimesi (örn: "apple")
+  
+  correctCount Int      @default(0)
+  wrongCount   Int      @default(0)
+  skippedCount Int      @default(0)
+  
+  // Gemini'nin dolduracağı alanlar
+  difficultyLevel Float?   @default(0) // 0.0 - 1.0 arası AI zorluk puanı
+  aiMnemonic      String?  @db.Text    // Gemini'nin ürettiği hatırlatıcı not
+
+  @@unique([flashcardId, wordKey])
+  @@map("word_analytics")
+}
+
+// 2. OTURUM BAZLI ANALİZ (n8n'e "Bugün ne yaptım?" raporu için)
+model StudySession {
+  id          Int       @id @default(autoincrement())
+  flashcardId String
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  knownCount   Int
+  unknownCount Int
+  skippedCount Int
+  
+  // Gemini'nin bu oturuma özel yorumu
+  aiFeedback   String?  @db.Text 
+  
+  createdAt    DateTime @default(now())
+
+  @@map("study_sessions")
+}
